@@ -20,16 +20,22 @@ The response includes structured fields:
 
 Read the `suggestion` field — it says what to do next in plain language.
 
-- If it says to adjust a parameter (e.g. "Retry with amount <= 60") and the adjusted value still satisfies the user's request, retry silently.
+- If the suggestion offers a parameter adjustment (e.g. "Retry with amount <= 60") and the adjusted value still fulfills the user's intent, you may retry with the adjusted value.
+- If the denial is a cumulative limit (daily/monthly), do not attempt further transactions — inform the user and wait.
+- Never initiate additional transactions that the user did not request.
 - If it says to ask the wallet owner to take action, stop and tell the user.
 
 ### Communicating denials to the user
 
 > "Transfer blocked: `<suggestion>`. To update the policy, ask the wallet owner."
 
-**Example — limit can be partially satisfied (retry silently):**
-User asked to send $80; suggestion says "Retry with amount <= 60." The reduced amount doesn't satisfy the request → tell the user:
+**Example — per-transaction limit (auto-retry OK):**
+User asked to send $80; suggestion says "Retry with amount <= 60." The reduced amount doesn't satisfy the full request → tell the user:
 > "Transfer blocked: the per-transaction limit is $60. I can retry with $60 — would you like that, or do you want to ask the wallet owner to raise the limit?"
+
+**Example — daily cumulative limit (do NOT retry):**
+User asked to send 0.005 SETH; denied by daily cumulative limit. Do NOT try smaller amounts or additional transactions. Tell the user:
+> "Transfer blocked: daily spending limit exceeded. Please wait until the limit resets, or ask the wallet owner to adjust the policy."
 
 **Example — owner action required:**
 Suggestion says "Ask the wallet owner to whitelist contract 0xUniswap..." → tell the user:
@@ -76,7 +82,7 @@ The environment requires an invitation code for autonomous onboarding.
 **Recovery:** Ask the user for an invitation code, then retry with `--invitation-code`:
 
 ```bash
-caw onboard --create-wallet --env sandbox --invitation-code <CODE>
+caw onboard --create-wallet --env prod --invitation-code <CODE>
 ```
 
 ### `Invalid invitation code` / `Invitation code already used`

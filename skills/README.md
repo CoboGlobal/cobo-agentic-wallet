@@ -32,11 +32,11 @@ If none of the above apply, this skill is probably not what you need.
 
 ### 1. Install the skill
 
-In Claude Code or another AI agent that supports skills, say:
+```bash
+npx skills add CoboGlobal/cobo-agentic-wallet --skill cobo-agentic-wallet --yes --global
+```
 
-```
-Install the cobo-agentic-wallet skill from https://agenticwallet.cobo.com/skills/cobo-agentic-wallet
-```
+Or via [ClawHub](https://clawhub.ai/) registry: `npx clawhub@latest install cobo-agentic-wallet`
 
 ### 2. Restart the gateway
 
@@ -70,7 +70,7 @@ Environment:
 - CLI tool: caw
 
 Core capabilities:
-- Transfer tokens: caw tx transfer <wallet_uuid> --to <addr> --token <id> --amount <n> --chain <id>
+- Transfer tokens: caw tx transfer <wallet_uuid> --to <addr> --token <id> --amount <n>
 - Contract call: caw tx call <wallet_uuid> --contract <addr> --calldata <hex> --chain <id>
 - Check balance: caw wallet balance <wallet_uuid>
 - List transactions: caw tx list <wallet_uuid>
@@ -120,7 +120,7 @@ Each recipe supports both testnet (simulation) and mainnet (real execution):
 
 | Strategy | EVM | Solana |
 |----------|-----|--------|
-| DEX Swap | [Uniswap V3](./cobo-agentic-wallet/recipes/evm-defi-dex-swap.md) | [Jupiter V6](./cobo-agentic-wallet/recipes/solana-defi-dex-swap.md) |
+| DEX Swap | [Uniswap V3](./evm-defi-dex-swap/SKILL.md) (standalone skill) | [Jupiter V6](./cobo-agentic-wallet/recipes/solana-defi-dex-swap.md) |
 | DCA | [EVM DCA](./cobo-agentic-wallet/recipes/evm-defi-dca.md) | [Solana DCA](./cobo-agentic-wallet/recipes/solana-defi-dca.md) |
 | Grid Trading | [EVM Grid](./cobo-agentic-wallet/recipes/evm-defi-grid-trading.md) | [Solana Grid](./cobo-agentic-wallet/recipes/solana-defi-grid-trading.md) |
 | Lending | [Aave V3](./cobo-agentic-wallet/recipes/evm-defi-aave.md) | — |
@@ -130,12 +130,14 @@ Also see: [Policy Management](./cobo-agentic-wallet/recipes/policy-management.md
 
 ## Supported Chains
 
+Common chain IDs for `--chain` and `--chain-id` flags:
+
 | Chain | Chain ID | Type |
 |---|---|---|
 | Ethereum | `ETH` | EVM |
-| Base | `BASE` | EVM |
-| Arbitrum | `ARBITRUM` | EVM |
-| Optimism | `OP` | EVM |
+| Base | `BASE_ETH` | EVM |
+| Arbitrum | `ARBITRUM_ETH` | EVM |
+| Optimism | `OPT_ETH` | EVM |
 | Polygon | `MATIC` | EVM |
 | Solana | `SOL` | Solana |
 | Sepolia (testnet) | `SETH` | EVM |
@@ -181,10 +183,12 @@ The script auto-generates the full contents of `cobo-agentic-wallet-sandbox/` an
 ```
 skills/
 ├── README.md                            # This file
-├── cobo-agentic-wallet/                 # Canonical source (edit here)
+├── cobo-agentic-wallet/                 # Core wallet skill (edit here)
 │   ├── SKILL.md                         # Main instructions (loaded on trigger)
 │   ├── recipes/                         # DeFi + operational recipes
 │   └── scripts/
 │       ├── bootstrap-env.sh             # Install caw and TSS Node
 │       └── convert_jupiter.sh           # Jupiter API → caw CLI format converter
+├── evm-defi-dex-swap/                   # Standalone DeFi skill (depends on cobo-agentic-wallet)
+│   └── SKILL.md                         # Uniswap V3 DEX swap instructions
 ```
