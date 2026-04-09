@@ -7,7 +7,7 @@ set -euo pipefail
 # caw: Cobo Agentic Wallet binary release (tar.gz). Package: caw-{version}-{os}-{arch}.tar.gz
 # Bucket: cobo-agenticwallet, path: /binary-release/0.1.0/ (linux-amd64, linux-arm64; darwin when published)
 CAW_BASE_URL="${CAW_BASE_URL:-https://download.agenticwallet.cobo.com/binary-release}"
-CAW_VERSION="${CAW_VERSION:-v0.2.12}"
+CAW_VERSION="${CAW_VERSION:-v0.2.52}"
 # TSS Node: Cobo download (tar.gz)
 TSS_BASE_URL="${TSS_BASE_URL:-https://download.tss.cobo.com/binary-release/latest}"
 ENV_NAME="${ENV_NAME:-prod}"
@@ -16,21 +16,19 @@ BIN_DIR="${BIN_DIR:-$INSTALL_ROOT/bin}"
 CACHE_TSS_DIR="${CACHE_TSS_DIR:-$INSTALL_ROOT/cache/tss-node}"
 LOG_DIR="${LOG_DIR:-$INSTALL_ROOT/logs}"
 FORCE_DOWNLOAD=false
-PRINT_WAITLIST_CURL=false
-# Replaced per-environment by sync_env_skills.py; default to sandbox for direct use
-WAITLIST_URL="${WAITLIST_API_URL:-https://api-assistant.agenticwallet.cobo.com/api/v1/waitlist/apply}"
+DOWNLOAD_ONLY="all"
 
 usage() {
   cat <<'EOF'
 Usage:
-  bootstrap-env.sh [--env prod] [--base-url URL] [--caw-version VER] [--force-download] [--print-waitlist-curl]
+  bootstrap-env.sh [--env prod] [--base-url URL] [--caw-version VER] [--only all|caw|tss] [--force-download]
 
 Options:
   --env               Cobo environment (sandbox/dev/prod), default: prod
   --base-url          TSS Node base URL (default: https://download.tss.cobo.com/binary-release/latest)
   --caw-version       caw package version (default: 0.1.0). Path: {base}/{ver}/caw-{ver}-{os}-{arch}.tar.gz
+  --only              Download scope: all (default), caw, tss
   --force-download    Always download (ignore existing caw and tss-node)
-  --print-waitlist-curl  Print curl command for waitlist apply and exit
 
 Download sources:
   caw:  https://cobo-agenticwallet.s3.us-west-2.amazonaws.com/binary-release/{ver}/caw-{ver}-{os}-{arch}.tar.gz
@@ -39,7 +37,7 @@ Download sources:
 Examples:
   bootstrap-env.sh --env prod
   bootstrap-env.sh --env prod --caw-version 0.1.0
-  bootstrap-env.sh --env prod --print-waitlist-curl
+  bootstrap-env.sh --env prod --only caw
 EOF
 }
 
@@ -57,12 +55,12 @@ while [[ $# -gt 0 ]]; do
       CAW_VERSION="$2"
       shift 2
       ;;
+    --only)
+      DOWNLOAD_ONLY="$2"
+      shift 2
+      ;;
     --force-download)
       FORCE_DOWNLOAD=true
-      shift 1
-      ;;
-    --print-waitlist-curl)
-      PRINT_WAITLIST_CURL=true
       shift 1
       ;;
     -h|--help)
@@ -77,12 +75,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$PRINT_WAITLIST_CURL" == "true" ]]; then
-  echo "curl -X POST \"$WAITLIST_URL\" \\"
-  echo "  -H \"Content-Type: application/json\" \\"
-  echo "  -d '{\"agent_name\":\"YOUR_AGENT_NAME\",\"agent_description\":\"Brief description\",\"email\":\"user@example.com\",\"telegram\":\"@handle\"}'"
-  exit 0
-fi
+case "$DOWNLOAD_ONLY" in
+  all|caw|tss) ;;
+  *)
+    echo "Invalid --only value: $DOWNLOAD_ONLY (expected: all, caw, tss)" >&2
+    exit 1
+    ;;
+esac
 
 detect_platform() {
   local os arch
@@ -154,7 +153,7 @@ local_caw_version_matches() {
   local want="$2"
   [[ -x "$caw_bin" ]] || return 1
   local got
-  got="$("$caw_bin" version 2>&1 || "$caw_bin" --version 2>&1)" || return 1
+  got="$("$caw_bin" version 2>&1)" || return 1
   got="$(echo "$got" | awk '{print $NF}')"
   [[ "$got" == "$want" ]]
 }
@@ -250,12 +249,28 @@ main() {
   read -r os arch < <(detect_platform)
   mkdir -p "$BIN_DIR" "$LOG_DIR" "$CACHE_TSS_DIR"
 
-  # Early exit: both binaries present, caw version matches, no force-download
+  # Early exit: required assets already present, no force-download.
   if [[ "$FORCE_DOWNLOAD" != "true" ]]; then
-    if local_caw_version_matches "$BIN_DIR/caw" "$CAW_VERSION" && [[ -x "$CACHE_TSS_DIR/cobo-tss-node" ]]; then
-      echo "ready"
-      exit 0
-    fi
+    case "$DOWNLOAD_ONLY" in
+      all)
+        if local_caw_version_matches "$BIN_DIR/caw" "$CAW_VERSION" && [[ -x "$CACHE_TSS_DIR/cobo-tss-node" ]]; then
+          echo "ready"
+          exit 0
+        fi
+        ;;
+      caw)
+        if local_caw_version_matches "$BIN_DIR/caw" "$CAW_VERSION"; then
+          echo "ready"
+          exit 0
+        fi
+        ;;
+      tss)
+        if [[ -x "$CACHE_TSS_DIR/cobo-tss-node" ]]; then
+          echo "ready"
+          exit 0
+        fi
+        ;;
+    esac
   fi
 
   local caw_url="${CAW_BASE_URL}/${CAW_VERSION}/caw-${os}-${arch}-${CAW_VERSION}.tar.gz"
@@ -267,54 +282,68 @@ main() {
   local caw_meta="$BIN_DIR/caw.meta"
   local tss_meta="$CACHE_TSS_DIR/tss.meta"
 
-  echo "      force=${FORCE_DOWNLOAD}"
+  echo "      force=${FORCE_DOWNLOAD}, only=${DOWNLOAD_ONLY}"
 
-  echo "[1/3] Start parallel download (caw + TSS)..."
-  (
-    set -euo pipefail
-    if should_download_artifact "$BIN_DIR/caw" "caw"; then
-      local caw_tmp_tar caw_remote_meta caw_etag caw_last_modified caw_content_length
-      caw_remote_meta="$(fetch_remote_meta "$caw_url" || true)"
-      IFS=$'\t' read -r caw_etag caw_last_modified caw_content_length <<<"${caw_remote_meta:-}"
-      caw_tmp_tar="$(mktemp)"
-      trap 'rm -f "$caw_tmp_tar"' EXIT
-      download_with_resume "$caw_url" "$caw_tmp_tar"
-      extract_caw_assets "$caw_tmp_tar" "$BIN_DIR"
-      write_meta_file "$caw_meta" "$caw_url" "${caw_etag:-}" "${caw_last_modified:-}" "${caw_content_length:-}"
-      echo "[DONE] caw downloaded to $BIN_DIR/caw"
-    else
-      echo "[DONE] caw reuse local binary at $BIN_DIR/caw"
-    fi
-  ) >"$caw_log" 2>&1 &
-  local caw_pid=$!
+  echo "[1/3] Start downloads..."
+  local caw_pid=""
+  local tss_pid=""
 
-  (
-    set -euo pipefail
-    if should_download_artifact "$CACHE_TSS_DIR/cobo-tss-node" "tss"; then
-      local tss_tmp_tar
-      local tss_remote_meta tss_etag tss_last_modified tss_content_length
-      tss_remote_meta="$(fetch_remote_meta "$tss_url" || true)"
-      IFS=$'\t' read -r tss_etag tss_last_modified tss_content_length <<<"${tss_remote_meta:-}"
-      tss_tmp_tar="$(mktemp)"
-      trap 'rm -f "$tss_tmp_tar"' EXIT
-      download_with_resume "$tss_url" "$tss_tmp_tar"
-      extract_tss_assets "$tss_tmp_tar"
-      write_meta_file "$tss_meta" "$tss_url" "${tss_etag:-}" "${tss_last_modified:-}" "${tss_content_length:-}"
-      echo "[DONE] Shared TSS cache downloaded at $CACHE_TSS_DIR"
-    else
-      echo "[DONE] Shared TSS cache reuse local assets at $CACHE_TSS_DIR"
-    fi
-  ) >"$tss_log" 2>&1 &
-  local tss_pid=$!
+  if [[ "$DOWNLOAD_ONLY" == "all" || "$DOWNLOAD_ONLY" == "caw" ]]; then
+    (
+      set -euo pipefail
+      if should_download_artifact "$BIN_DIR/caw" "caw"; then
+        local caw_tmp_tar caw_remote_meta caw_etag caw_last_modified caw_content_length
+        caw_remote_meta="$(fetch_remote_meta "$caw_url" || true)"
+        IFS=$'\t' read -r caw_etag caw_last_modified caw_content_length <<<"${caw_remote_meta:-}"
+        caw_tmp_tar="$(mktemp)"
+        trap 'rm -f "$caw_tmp_tar"' EXIT
+        download_with_resume "$caw_url" "$caw_tmp_tar"
+        extract_caw_assets "$caw_tmp_tar" "$BIN_DIR"
+        write_meta_file "$caw_meta" "$caw_url" "${caw_etag:-}" "${caw_last_modified:-}" "${caw_content_length:-}"
+        echo "[DONE] caw downloaded to $BIN_DIR/caw"
+      else
+        echo "[DONE] caw reuse local binary at $BIN_DIR/caw"
+      fi
+    ) >"$caw_log" 2>&1 &
+    caw_pid=$!
+    echo "      caw pid=${caw_pid}, log=${caw_log}"
+  else
+    echo "      caw skipped (--only=${DOWNLOAD_ONLY})"
+  fi
 
-  echo "      caw pid=${caw_pid}, log=${caw_log}"
-  echo "      tss pid=${tss_pid}, log=${tss_log}"
+  if [[ "$DOWNLOAD_ONLY" == "all" || "$DOWNLOAD_ONLY" == "tss" ]]; then
+    (
+      set -euo pipefail
+      if should_download_artifact "$CACHE_TSS_DIR/cobo-tss-node" "tss"; then
+        local tss_tmp_tar
+        local tss_remote_meta tss_etag tss_last_modified tss_content_length
+        tss_remote_meta="$(fetch_remote_meta "$tss_url" || true)"
+        IFS=$'\t' read -r tss_etag tss_last_modified tss_content_length <<<"${tss_remote_meta:-}"
+        tss_tmp_tar="$(mktemp)"
+        trap 'rm -f "$tss_tmp_tar"' EXIT
+        download_with_resume "$tss_url" "$tss_tmp_tar"
+        extract_tss_assets "$tss_tmp_tar"
+        write_meta_file "$tss_meta" "$tss_url" "${tss_etag:-}" "${tss_last_modified:-}" "${tss_content_length:-}"
+        echo "[DONE] Shared TSS cache downloaded at $CACHE_TSS_DIR"
+      else
+        echo "[DONE] Shared TSS cache reuse local assets at $CACHE_TSS_DIR"
+      fi
+    ) >"$tss_log" 2>&1 &
+    tss_pid=$!
+    echo "      tss pid=${tss_pid}, log=${tss_log}"
+  else
+    echo "      tss skipped (--only=${DOWNLOAD_ONLY})"
+  fi
 
   echo "[2/3] Waiting for prework to complete..."
-  wait_job_or_fail "$caw_pid" "$caw_log" "caw download"
-  wait_job_or_fail "$tss_pid" "$tss_log" "tss prewarm"
+  if [[ -n "$caw_pid" ]]; then
+    wait_job_or_fail "$caw_pid" "$caw_log" "caw download"
+  fi
+  if [[ -n "$tss_pid" ]]; then
+    wait_job_or_fail "$tss_pid" "$tss_log" "tss prewarm"
+  fi
 
-  echo "[3/3] Done. caw at $BIN_DIR/caw, TSS at $CACHE_TSS_DIR"
+  echo "[3/3] Done. caw at $BIN_DIR/caw, TSS at $CACHE_TSS_DIR (mode=${DOWNLOAD_ONLY})"
 }
 
 main "$@"

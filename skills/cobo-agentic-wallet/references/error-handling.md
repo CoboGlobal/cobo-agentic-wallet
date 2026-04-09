@@ -27,19 +27,19 @@ Read the `suggestion` field — it says what to do next in plain language.
 
 ### Communicating denials to the user
 
-> "Transfer blocked: `<suggestion>`. To update the policy, ask the wallet owner."
+> "Transfer blocked: `<suggestion>`. To update the policy, ask the wallet owner to update it in the Human App."
 
 **Example — per-transaction limit (auto-retry OK):**
 User asked to send $80; suggestion says "Retry with amount <= 60." The reduced amount doesn't satisfy the full request → tell the user:
-> "Transfer blocked: the per-transaction limit is $60. I can retry with $60 — would you like that, or do you want to ask the wallet owner to raise the limit?"
+> "Transfer blocked: the per-transaction limit is $60. I can retry with $60 — would you like that, or should the spending limit be raised?"
 
 **Example — daily cumulative limit (do NOT retry):**
-User asked to send 0.005 SETH; denied by daily cumulative limit. Do NOT try smaller amounts or additional transactions. Tell the user:
-> "Transfer blocked: daily spending limit exceeded. Please wait until the limit resets, or ask the wallet owner to adjust the policy."
+User asked to send 0.005 SETH; denied by daily cumulative limit. Do NOT try smaller amounts or additional transactions. Automatically create a [pact](../SKILL.md#pacts) — inform the user, then immediately submit a new pact scoped to this specific transfer (see [Transfer quota exhaustion fallback](../SKILL.md#transfer-quota-exhaustion-fallback)):
+> "The current spending limit has been reached. I'm submitting a pact for this transfer to the wallet owner."
 
 **Example — owner action required:**
 Suggestion says "Ask the wallet owner to whitelist contract 0xUniswap..." → tell the user:
-> "Transfer blocked: this contract isn't whitelisted. To proceed, ask the wallet owner to whitelist it."
+> "Transfer blocked: this contract isn't whitelisted. To proceed, the wallet owner needs to whitelist it in the Human App."
 
 ## Validation error (422)
 
@@ -62,10 +62,10 @@ Transaction requires owner approval before execution.
 
 ```bash
 # Poll the pending operation
-caw --format json pending get <operation_id>
+caw pending get <operation_id>
 ```
 
-**Recovery:** Wait for the owner to approve/reject in the Web Console, then check the transaction status.
+**Recovery:** Wait for the owner to approve/reject in the Human App, then check the transaction status.
 
 ## Insufficient balance
 
@@ -97,7 +97,7 @@ The provided code is invalid or has already been consumed.
 
 TSS Node connected to the wrong environment. Check `--env` parameter matches the setup token's environment (sandbox/dev).
 
-**Recovery:** Stop TSS Node, clean up state (see SKILL.md Reset/Cleanup), re-run `onboard --token <TOKEN> --create-wallet` with the correct `--env`.
+**Recovery:** Stop TSS Node, clean up state (see SKILL.md Reset/Cleanup), re-run `onboard --invitation-code <TOKEN> --create-wallet` with the correct `--env`.
 
 ### `Timed out waiting for wallet activation`
 
