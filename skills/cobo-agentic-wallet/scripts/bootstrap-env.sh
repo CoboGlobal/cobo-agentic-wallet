@@ -7,7 +7,7 @@ set -euo pipefail
 # caw: Cobo Agentic Wallet binary release (tar.gz). Package: caw-{version}-{os}-{arch}.tar.gz
 # Bucket: cobo-agenticwallet, path: /binary-release/0.1.0/ (linux-amd64, linux-arm64; darwin when published)
 CAW_BASE_URL="${CAW_BASE_URL:-https://download.agenticwallet.cobo.com/binary-release}"
-CAW_VERSION="${CAW_VERSION:-v0.2.52}"
+CAW_VERSION="${CAW_VERSION:-v0.2.53}"
 # TSS Node: Cobo download (tar.gz)
 TSS_BASE_URL="${TSS_BASE_URL:-https://download.tss.cobo.com/binary-release/latest}"
 ENV_NAME="${ENV_NAME:-prod}"

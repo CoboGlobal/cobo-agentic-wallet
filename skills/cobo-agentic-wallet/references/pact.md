@@ -4,34 +4,13 @@ This document covers pact lifecycle management — from creation and approval th
 
 ## When to submit a pact
 
-All on-chain transactions MUST go through a pact. On-chain transactions include: token transfers (`caw tx transfer`), contract calls (`caw tx call`), and message signing (`caw tx sign-message`). Read-only queries (`caw wallet balance`, `caw tx list`, etc.) do not require a pact.
+Any task that uses `caw tx transfer`, `caw tx call`, or `caw tx sign-message` requires a pact. If no suitable pact exists, create one by following the steps below.
 
-> Default pacts cannot be used for any transaction — always create a new pact or use an existing non-default pact.
+> Default pacts cannot be used — always use a non-default pact.
 
-## Execution Flow
+## Lifecycle Management
 
-### Phase 1 — Understand Intent
-
-- Parse the user's request: identify operation type (transfer / contract-call / sign-message), target wallet, asset, chain, amount, recipient.
-- Collect any missing parameters before proceeding.
-- Dedup check: `caw pact list --status pending_approval --wallet-id <id>`. If a pending pact with the same intent already exists, do NOT submit a new one.
-
-### Phase 2 — Create Pact
-
-- Construct pact parameters from the user's intent (see [`caw pact submit` Flag Reference](#caw-pact-submit-flag-reference)).
-- Present a pre-submit preview to the user with the **4 core items**:
-
-  | # | Item | What to show |
-  |---|------|--------------|
-  | 1 | 🎯 **Intent** | One-sentence goal: what asset, what action, which chain |
-  | 2 | 📝 **Execution Plan** | 2–4 bullet summary of concrete on-chain operations the agent will perform once the pact is active |
-  | 3 | 📜 **Policies** | Per-tx cap, daily cap, scope/chain/token/contract restrictions |
-  | 4 | 🏁 **Completion Conditions** | Time limit, total spend cap |
-
-  - If the wallet is **not paired**: ask for explicit user confirmation before you submit the pact. Do not submit without sign-off.
-  - If the wallet is **paired**: submit directly — the owner will review and approve the pact in the **Human App**, so in-conversation confirmation is not needed.
-
-### Phase 3 — Submit & Track
+### Submit & Track
 
 - Submit: `caw pact submit ...` → returns `pact_id`.
 - Inform the user the pact has been submitted.
@@ -39,7 +18,7 @@ All on-chain transactions MUST go through a pact. On-chain transactions include:
   - If **paired**: remind the user to approve in the **Human App**.
 - Start tracking: `caw track --watch` polls pact status and sends a notification when the status changes.
 
-### Phase 4 — Act on Result
+### Act on Result
 
 - **If `active`** (approved):
   - Reply: "Pact approved — executing now."
@@ -55,16 +34,160 @@ All on-chain transactions MUST go through a pact. On-chain transactions include:
   - Tell the user: "The owner declined this action."
   - Offer to revise the pact with narrower scope (lower caps, shorter duration, tighter allowlists) and resubmit.
 
-
 - **If `revoked` / `expired` / `completed`**:
   - Stop execution immediately. Inform the user of the status change and reason.
   - If the user's goal is not yet fulfilled, offer to submit a new pact.
 
-### Phase 5 — Report
+### Report
 
 - Show the transaction result in plain language (amounts, addresses, tx hash).
 - Suggest next steps if applicable.
 
+## Pact Generation: Intent → Plan → Policy
+
+### Step 1 — Parse Intent
+
+> Thinking mode: precision without over-assumption
+
+Your job: Extract what the owner wants, precisely, without guessing.
+
+You must answer:
+
+- What action are you building toward? (transfer, swap, lend, etc.)
+- What assets, chains, amounts are involved?
+- What's the timeframe? (one-time, daily, weekly, monthly?)
+- What constraints did the owner mention explicitly?
+- What's unclear? Write it down — do not guess.
+
+**Output:** Write down explicit parameters + list of ambiguities. Do not continue to Step 2 until ambiguities are resolved or explicitly noted.
+
+### Step 2 — Query Recipe
+
+> Thinking mode: match use case, not details
+
+Your job: Find the recipe(s) that apply to this task type.
+
+A Recipe is a domain knowledge document for a specific operation type (e.g. DEX swap, lending, DCA). Find the recipe whose use case matches the intent — if no recipe matches, proceed without one. If a match is found, read it before continuing.
+
+```bash
+caw recipe search "<protocol-name> <chain>"
+# e.g. "uniswap base", "aave arbitrum", "jupiter solana"
+```
+
+**Output:** The relevant recipe(s) to apply in Steps 3, 4, and 5.
+
+### Step 3 — Design Execution Plan
+
+> Thinking mode: strategic execution
+
+Your job: Design concrete steps that accomplish the intent. Use the recipe from Step 2 as a reference for the typical flow and operational considerations for this task type.
+
+You must decide:
+
+- What are the steps for this task? (use the recipe's typical flow as a guide)
+- For this specific intent, do you need splitting? gas monitoring? approval checkpoints?
+- Where will you monitor, retry, or adjust during execution?
+- What happens if a step fails? What's your recovery path?
+
+You write 4–8 steps covering: preconditions, main operations, monitoring, error recovery, verification.
+
+**Output:** Markdown execution plan specific to this intent, not generic.
+
+### Step 4 — Define Policy and Completion Conditions
+
+> Thinking mode: least privilege
+
+Your job: Derive `--policies` and `--completion-conditions` from the intent and execution plan.
+
+**Policy** — grant only what the execution plan needs, nothing more. Use the recipe from Step 2 as a guide. The policy engine will block anything not explicitly allowed. See [Policy Reference](#policy-reference---policies) for supported fields and schema.
+
+**Completion conditions** — when should the pact be considered done? Derive from the intent (e.g. one-time → `tx_count: 1`, monthly DCA for 6 months → `time_elapsed: 15552000` or `tx_count: 6`). See [Completion Conditions](#completion-conditions---completion-conditions) for supported types.
+
+
+### Step 5 — Assemble Pact
+
+> Thinking mode: coherence and consistency
+
+Your job: Put it together and verify all four parts support each other.
+
+Before you submit, verify:
+
+- ✅ Intent, plan, policy, and completion conditions are aligned — no contradictions
+- ✅ Policy grants exactly what the execution plan needs — no more, no less
+- ✅ Completion condition is observable and testable ("after 10 txs" ✅, "when safe" ❌)
+
+Present a pre-submit preview to the user with the **4 core items**:
+
+| # | Item | What to show |
+|---|------|--------------|
+| 1 | 🎯 **Intent** | One-sentence goal: what asset, what action, which chain |
+| 2 | 📝 **Execution Plan** | 2–4 bullet summary of concrete on-chain operations the agent will perform once the pact is active |
+| 3 | 📜 **Policies** | Chain/token/contract allowlists, spend caps |
+| 4 | 🏁 **Completion Conditions** | When the pact ends: tx count, spend limit, or time elapsed |
+
+- If the wallet is **not paired**: **do NOT submit without explicit user confirmation.** Show the preview and wait for sign-off.
+- If the wallet is **paired**: submit directly — the owner will review and approve the pact in the **Human App**, so in-conversation confirmation is not needed.
+
+Then submit via `caw pact submit` (see [`caw pact submit` Flag Reference](#caw-pact-submit-flag-reference)).
+
+---
+
+### Example: USDC → ETH Swap on Base
+
+**Step 1 — Intent:**
+
+- Action: swap USDC → ETH
+- Asset/amount: $5000 USDC
+- Chain: Base
+- Timeframe: one-time
+- Unclear: slippage tolerance not specified
+
+**Step 2 — Recipe:**
+
+`caw recipe search "uniswap base"` → matches Uniswap V3 on Base recipe.
+
+**Step 3 — Plan:**
+
+1. Check wallet USDC balance ≥ $5000
+2. Query Uniswap V3 USDC/ETH pool on Base for current rate
+3. Amount $5000 < $10k threshold → no split needed
+4. Execute swap with 0.5% slippage tolerance, 5-minute deadline
+5. Monitor tx; retry up to 2x on gas spike or slippage rejection
+6. Verify swap receipt on-chain
+
+**Step 4 — Policy and completion conditions:**
+
+Policy — allow Uniswap V3 router on Base, cap at 3 txs/24h (one-time swap, capped conservatively):
+
+```json
+[
+  {
+    "name": "usdc-eth-swap",
+    "type": "contract_call",
+    "rules": {
+      "effect": "allow",
+      "when": {
+        "chain_in": ["BASE_ETH"],
+        "target_in": [{ "chain_id": "BASE_ETH", "contract_addr": "0x2626664c2603336E57B271c5C0b26F421741e481" }]
+      },
+      "deny_if": {
+        "usage_limits": { "rolling_24h": { "tx_count_gt": 3 } }
+      }
+    }
+  }
+]
+```
+
+Completion condition — one-time swap: `tx_count: 1`
+
+
+**Step 5 — Assemble and verify:**
+
+- ✅ Intent ($5000 USDC→ETH on Base), plan, and policy all aligned
+- ✅ Policy grants exactly what the plan needs: Uniswap V3 router on Base
+- ✅ Completion condition is testable: after 1 tx
+
+---
 
 ## `caw pact submit` Flag Reference
 
@@ -123,7 +246,7 @@ Transfer 1000 USDC to 0xABC...123 on Base.
 
 ### Execution Plan (`--execution-plan`)
 
-Describe **only the on-chain operations the agent will run after the pact is active**. Use these sections:
+Describe the operations the agent will run after the pact is active. Use these sections:
 
 - `# Summary` — one-line goal
 - `# Operations` — concrete calls/transfers (token, amount, target contract)
@@ -155,7 +278,7 @@ JSON array defining when a pact is considered complete. Each object has `type` a
 | `amount_spent_usd` | string (decimal) | Complete after cumulative USD spend reaches threshold. E.g., `"3000"`. Note: transactions without price data won't increment progress. |
 | `time_elapsed` | string (seconds) | Complete after N seconds from pact activation. E.g., `"3600"` (1 hour). |
 
-Multiple conditions can be set; the pact completes when **any one** is satisfied (any-of semantics). Once complete, all permissions granted by the pact are revoked immediately.
+Multiple conditions can be set; the pact completes when **any one** is satisfied (any-of semantics). Once complete, the pact is revoked immediately and no further operations can be executed under it.
 
 ### Policy Reference (`--policies`)
 

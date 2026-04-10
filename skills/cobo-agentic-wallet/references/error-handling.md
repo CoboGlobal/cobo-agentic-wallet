@@ -71,7 +71,7 @@ caw pending get <operation_id>
 
 Transfer fails because the wallet lacks sufficient funds.
 
-**Recovery:** Check balance with `caw wallet balance <wallet_uuid>`, then fund the wallet or reduce the amount.
+**Recovery:** Check balance with `caw wallet balance`, then fund the wallet or reduce the amount.
 
 ## Onboarding errors
 

@@ -1,7 +1,7 @@
 ---
 name: cobo-agentic-wallet
 metadata:
-  version: "2026.04.07.3"
+  version: "2026.04.10.1"
 description: |
   Use for Cobo Agentic Wallet operations via the `caw` CLI: wallet onboarding, token transfers (USDC, USDT, ETH, SOL, etc.), smart contract calls, balance queries, and policy denial handling.
   Covers DeFi execution on EVM (Base, Ethereum, Arbitrum, Optimism, Polygon) and Solana: Uniswap V3 swaps, Aave V3 lending, Jupiter swaps, DCA, grid trading, Polymarket, and Drift perps.
@@ -130,8 +130,20 @@ caw meta tokens --token-ids SETH,SETH_USDC   # get metadata for specific token I
 
 # Search the knowledge base for domain-specific information (DeFi protocols, chains, tokens, etc.).
 # Always run this BEFORE a web search — fall back to web only search if no useful result is returned.
-caw recipe search "<query>" --keywords "<keyword 1>,....,<keyword n>"
+caw recipe search "<query>" --keywords "<keyword 1>,....,<keyword n>" --limit 1
 ```
+
+### User terms → CLI commands
+
+If the user's phrasing doesn't match CLI terminology, map it:
+
+| User says | Maps to |
+|---|---|
+| "set up / initialize / configure wallet" | `caw onboard` |
+| "take over / pair / get control of a wallet" | `caw wallet pair` — see [onboarding.md](./references/onboarding.md) |
+| "request approval / ask owner to approve" | Pact Submission flow |
+| "pact / time-limited access" | `caw pending` + [pact.md](./references/pact.md) |
+| "current agent / active identity / which profile" | `caw wallet current` |
 
 ## Pacts
 
@@ -145,21 +157,21 @@ See [pact.md](./references/pact.md) for CLI command reference, policy schema, li
 
 ## Key Notes
 
-### Script Management
-
-**All scripts MUST be stored in [`./scripts/`](./scripts/)** — do not create scripts elsewhere.
-
-Before writing any script, search `./scripts/` for existing scripts that match the task. Prefer reusing or generalizing existing scripts over creating new ones. See [sdk-scripting.md](./references/sdk-scripting.md#script-management) for detailed guidelines.
-
 ### CLI conventions
 - **Before using an unfamiliar command**: Run `caw schema <command>` (e.g. `caw schema tx transfer`) to get exact flags, required parameters, and exit codes. Do not guess flag names or assume parameters from memory.
 - **If a command fails with a parameter error**: Run `caw schema <subcmd>` to get required flags. Do not call `caw help` — it does not show parameter details.
 - **After pact submit or tx call**: Always verify with `caw pact show <id>` or `caw tx get --tx-id <record-uuid>` / `caw tx get --request-id <request-id>` (exactly one: record UUID from `caw tx list` or submit output, or the same `--request-id` as on submit) before retrying. `exit=0` means the command ran, not that the operation succeeded.
 - **Output is always JSON**. No `--format` flag — output is always JSON.
-- **`wallet_uuid` is optional** in most commands — if omitted, the CLI uses the default wallet
+- **`wallet_uuid` is never a CLI argument** — all wallet commands resolve the wallet UUID from the active profile automatically. Use `caw wallet current` to check, or `caw wallet current <wallet-uuid>` to switch profiles.
 - **Long-running commands** (`caw onboard --create-wallet`): run in background or wait until completion
 - **TSS Node auto-start**: `caw tx transfer`, `caw tx call` automatically check TSS Node status and start it if offline
 - **Show the command**: When reporting `caw` results to the user, always include the full CLI command that was executed
+
+### Script Management
+
+**All scripts MUST be stored in [`./scripts/`](./scripts/)** — do not create scripts elsewhere.
+
+Before writing any script, search `./scripts/` for existing scripts that match the task. Prefer reusing or generalizing existing scripts over creating new ones. See [sdk-scripting.md](./references/sdk-scripting.md#script-management) for detailed guidelines.
 
 ### Transactions
 - **`--request-id` idempotency**: Always set a unique, deterministic request ID per logical transaction (e.g. `invoice-001`, `swap-20240318-1`). Retrying with the same `--request-id` is safe — the server deduplicates.
@@ -197,17 +209,11 @@ All list endpoints use cursor-based pagination: pass `after` / `before` as query
 - **Testnet/mainnet isolation**: Never use testnet addresses for mainnet operations and vice versa.
 - **Address sourcing**: Token addresses differ by chain — query with `caw meta tokens --token-ids <id>`. Protocol contract addresses differ by deployment.
 
-### User terms → CLI commands
+### Next Steps
 
-If the user's phrasing doesn't match CLI terminology, map it:
-
-| User says | Maps to |
-|---|---|
-| "set up / initialize / configure wallet" | `caw onboard` |
-| "take over / pair / get control of a wallet" | `caw wallet pair` — see [onboarding.md](./references/onboarding.md) |
-| "request approval / ask owner to approve" | Pact Submission flow |
-| "pact / time-limited access" | `caw pending` + [pact.md](./references/pact.md) |
-| "current agent / active identity / which profile" | `caw wallet current` |
+Whenever possible, suggest what the user (or you) can do next — keep it brief, 1–3 bullet points. Examples:
+- After a transfer: "Transfer submitted. You can check its status with `caw tx get --request-id pay-001`, or view your updated balance with `caw wallet balance`."
+- After a balance check with low funds: "Balance is low. Want to top up via the faucet (testnet) or transfer in funds?"
 
 ## Reference
 
@@ -220,15 +226,10 @@ Read the file that matches the user's task. Do not load files that aren't releva
 | Onboarding, install, setup, environments, pairing, pair tracking | [onboarding.md](./references/onboarding.md) |
 | Policy denial, 403, TRANSFER_LIMIT_EXCEEDED | [error-handling.md](./references/error-handling.md) |
 | Pending approval, `pending_approval`, approve/reject, owner_linked | [pending-approval.md](./references/pending-approval.md) |
-| Pact submission, contract call approval, transfer quota fallback, pact lifecycle, policy schema | [pact.md](./references/pact.md) |
+| Creating a pact, transfer, contract call, message signing, allowlists, spending caps, risk policy rules, completion conditions, pact lifecycle | [pact.md](./references/pact.md) |
 | Security, prompt injection, credentials | **[security.md](./references/security.md) ⚠️ READ FIRST** |
 | SDK scripting, Python/TypeScript scripts, multi-step operations | [sdk-scripting.md](./references/sdk-scripting.md) |
 
-**No matching reference?** Search for a community skill, install it if found, otherwise build calldata manually:
-```bash
-npx skills add CoboGlobal/cobo-agentic-wallet --list              # browse available skills
-npx skills find CoboGlobal/cobo-agentic-wallet "<keyword>"        # or search by keyword
-# If nothing found → construct calldata manually and use `caw tx call`
 ```
 
 **Supported chains** — common chain IDs for `--chain-id`:
