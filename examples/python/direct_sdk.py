@@ -21,19 +21,40 @@ ALLOWED_AMOUNT = "0.001"
 DENIED_AMOUNT = "0.005"
 DENY_THRESHOLD = "0.002"
 
+PACT_SPEC = {
+    "policies": [
+        {
+            "name": "max-tx-limit",
+            "type": "transfer",
+            "rules": {
+                "effect": "allow",
+                "when": {
+                    "chain_in": [CHAIN_ID],
+                    "token_in": [{"chain_id": CHAIN_ID, "token_id": TOKEN_ID}],
+                },
+                "deny_if": {"amount_gt": DENY_THRESHOLD},
+            },
+        }
+    ],
+    "completion_conditions": [{"type": "time_elapsed", "threshold": "86400"}],
+}
+
+
+def print_tx(tag: str, tx: dict) -> None:
+    print(
+        f"      {tag}: tx_id={tx.get('id')} status={tx.get('status')} "
+        f"({tx.get('status_display') or '-'}) request_id={tx.get('request_id')} "
+        f"hash={tx.get('transaction_hash') or '-'}"
+    )
+
 
 async def main() -> None:
     api_url = os.environ["AGENT_WALLET_API_URL"]
     api_key = os.environ["AGENT_WALLET_API_KEY"]
     wallet_id = os.environ["AGENT_WALLET_WALLET_ID"]
-    destination = os.environ.get(
-        "CAW_DESTINATION",
-        "0x1111111111111111111111111111111111111111",
-    )
+    destination = os.environ.get("CAW_DESTINATION", "0x1111111111111111111111111111111111111111")
 
-    client = WalletAPIClient(base_url=api_url, api_key=api_key)
-
-    try:
+    async with WalletAPIClient(base_url=api_url, api_key=api_key) as client:
         # Step 1: Submit a pact requesting transfer permissions for 24 hours.
         print(
             f"[1/6] Submitting pact (allow {CHAIN_ID}/{TOKEN_ID} transfers, "
@@ -42,25 +63,7 @@ async def main() -> None:
         pact_resp = await client.submit_pact(
             wallet_id=wallet_id,
             intent="Transfer tokens for integration testing",
-            spec={
-                "policies": [
-                    {
-                        "name": "max-tx-limit",
-                        "type": "transfer",
-                        "rules": {
-                            "effect": "allow",
-                            "when": {
-                                "chain_in": [CHAIN_ID],
-                                "token_in": [{"chain_id": CHAIN_ID, "token_id": TOKEN_ID}],
-                            },
-                            "deny_if": {"amount_gt": DENY_THRESHOLD},
-                        },
-                    }
-                ],
-                "completion_conditions": [
-                    {"type": "time_elapsed", "threshold": "86400"}
-                ],
-            },
+            spec=PACT_SPEC,
         )
         pact_id = pact_resp["pact_id"]
         print(f"      pact submitted: id={pact_id}")
@@ -84,10 +87,7 @@ async def main() -> None:
 
         # Step 3: Use the pact-scoped API key for all subsequent calls.
         print("[3/6] Pact is active; switching to pact-scoped API key.")
-        pact_api_key = pact["api_key"]
-        pact_client = WalletAPIClient(base_url=api_url, api_key=pact_api_key)
-
-        try:
+        async with WalletAPIClient(base_url=api_url, api_key=pact["api_key"]) as pact_client:
             # Step 4: Execute an allowed transfer (within the deny threshold).
             print(
                 f"[4/6] Submitting allowed transfer: {ALLOWED_AMOUNT} {TOKEN_ID} -> {destination}"
@@ -99,15 +99,9 @@ async def main() -> None:
                 token_id=TOKEN_ID,
                 amount=ALLOWED_AMOUNT,
             )
-            print(
-                f"      ALLOWED: tx_id={allowed.get('id')} "
-                f"status={allowed.get('status')} ({allowed.get('status_display') or '-'}) "
-                f"request_id={allowed.get('request_id')} "
-                f"hash={allowed.get('transaction_hash') or '-'}"
-            )
+            print_tx("ALLOWED", allowed)
 
-            # Step 5: Trigger a policy denial (amount exceeds the deny threshold),
-            # then follow the denial guidance and retry with a compliant amount.
+            # Step 5: Trigger a policy denial, then retry with a compliant amount.
             print(
                 f"[5/6] Submitting transfer that should be blocked: "
                 f"{DENIED_AMOUNT} {TOKEN_ID} -> {destination}"
@@ -131,9 +125,7 @@ async def main() -> None:
                 if denial.suggestion:
                     print(f"      suggestion: {denial.suggestion}")
 
-                print(
-                    f"      retrying with compliant amount {ALLOWED_AMOUNT} {TOKEN_ID}..."
-                )
+                print(f"      retrying with compliant amount {ALLOWED_AMOUNT} {TOKEN_ID}...")
                 retry = await pact_client.transfer_tokens(
                     wallet_id,
                     chain_id=CHAIN_ID,
@@ -141,26 +133,17 @@ async def main() -> None:
                     token_id=TOKEN_ID,
                     amount=ALLOWED_AMOUNT,
                 )
-                print(
-                    f"      RETRY ALLOWED: tx_id={retry.get('id')} "
-                    f"status={retry.get('status')} ({retry.get('status_display') or '-'}) "
-                    f"request_id={retry.get('request_id')} "
-                    f"hash={retry.get('transaction_hash') or '-'}"
-                )
-        finally:
-            await pact_client.close()
+                print_tx("RETRY ALLOWED", retry)
 
         # Step 6: Verify allowed and denied events in audit logs.
         print("[6/6] Fetching recent audit entries for this wallet...")
         logs = await client.list_audit_logs(wallet_id=wallet_id, limit=20)
-        items = logs.get("items", []) if isinstance(logs, dict) else []
+        items = logs.get("items", [])
         allowed_count = sum(1 for item in items if item.get("result") == "allowed")
         denied_count = sum(1 for item in items if item.get("result") == "denied")
-        print(f"      audit (last {len(items)} entries): allowed={allowed_count}, denied={denied_count}")
+        print(
+            f"      audit (last {len(items)} entries): allowed={allowed_count}, denied={denied_count}"
+        )
 
-    finally:
-        await client.close()
 
-
-if __name__ == "__main__":
-    asyncio.run(main())
+asyncio.run(main())
