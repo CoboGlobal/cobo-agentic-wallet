@@ -133,10 +133,19 @@ main() {
   (
     set -euo pipefail
     caw_tmp_tar="$(mktemp)"
-    trap 'rm -f "$caw_tmp_tar"' EXIT
+    caw_tmp_sum="$(mktemp)"
+    trap 'rm -f "$caw_tmp_tar" "$caw_tmp_sum"' EXIT
     download_with_resume "$caw_url" "$caw_tmp_tar"
+    echo "Verifying checksum..."
+    download_with_resume "${caw_url}.sha256" "$caw_tmp_sum"
+    expected_sum="$(awk '{print $1}' "$caw_tmp_sum")"
+    actual_sum="$(sha256_file "$caw_tmp_tar")"
+    if [[ "$actual_sum" != "$expected_sum" ]]; then
+      echo "Checksum mismatch: expected $expected_sum, got $actual_sum" >&2
+      exit 1
+    fi
+    echo "Checksum OK (${actual_sum:0:12}...)"
     extract_caw_assets "$caw_tmp_tar" "$BIN_DIR"
-    echo "[DONE] caw installed to $BIN_DIR/caw"
   ) >"$caw_log" 2>&1 &
   caw_pid=$!
 
@@ -146,13 +155,12 @@ main() {
     trap 'rm -f "$tss_tmp_tar"' EXIT
     download_with_resume "$tss_url" "$tss_tmp_tar"
     extract_tss_assets "$tss_tmp_tar"
-    echo "[DONE] TSS node installed to $CACHE_TSS_DIR"
   ) >"$tss_log" 2>&1 &
   tss_pid=$!
 
   echo "[2/3] Waiting for downloads to complete..."
-  [[ -n "$caw_pid" ]] && wait_job_or_fail "$caw_pid" "$caw_log" "caw download"
-  [[ -n "$tss_pid" ]] && wait_job_or_fail "$tss_pid" "$tss_log" "tss download"
+  [[ -n "$caw_pid" ]] && wait_job_or_fail "$caw_pid" "$caw_log" "caw download" && cat "$caw_log"
+  [[ -n "$tss_pid" ]] && wait_job_or_fail "$tss_pid" "$tss_log" "tss download" && cat "$tss_log"
 
   echo "[3/3] Done. caw $("$BIN_DIR/caw" --version) at $BIN_DIR/caw, TSS at $CACHE_TSS_DIR"
 }
