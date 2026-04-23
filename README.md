@@ -227,10 +227,16 @@ Runnable examples live under [`examples/`](examples/):
 
 Agent skills live under [`skills/`](skills/). These are skill definitions that enable AI agents to operate Cobo Agentic Wallets — covering onboarding, token transfers, DeFi execution, and more.
 
-Install the skill:
+Install the skill for onchain operations:
 
 ```bash
 npx skills add CoboGlobal/cobo-agentic-wallet --skill cobo-agentic-wallet --yes --global
+```
+
+Install the developer skill for SDK and CLI integration support:
+
+```bash
+npx skills add CoboGlobal/cobo-agentic-wallet --skill cobo-agentic-wallet-developer --yes --global
 ```
 
 ## Additional references
