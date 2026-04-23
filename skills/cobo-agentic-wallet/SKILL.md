@@ -1,7 +1,7 @@
 ---
 name: cobo-agentic-wallet
 metadata:
-  version: "2026.04.18.4"
+  version: "2026.04.18.5"
 description: |
   Create and manage agentic wallets with Cobo. Use for autonomous onchain
   operations via the caw CLI: token transfers, contract calls, pact creation
@@ -158,7 +158,11 @@ Recipes **inform** pact generation; they do not replace owner approval or policy
 
 #### Pairing (optional)
 
-After onboarding, the owner can pair the wallet to transfer ownership from agent to human. Run `caw wallet pair` to generate a code; tell the owner to enter it in the Cobo Agentic Wallet app. After pairing, the agent becomes a delegate — on-chain operations require a pact approved by the human owner.
+After onboarding, the owner can pair the wallet to transfer ownership from agent to human. Run `caw wallet pair` to generate a code; tell the owner to enter it in the Cobo Agentic Wallet app. If the owner doesn't have the app installed, share the download links:
+- iOS: https://apps.apple.com/app/id6761912352
+- Android: https://play.google.com/store/apps/details?id=com.cobo.agenticwallet
+
+After pairing, the agent becomes a delegate — on-chain operations require a pact approved by the human owner.
 
 #### Session Recovery (Agent Restart)
 

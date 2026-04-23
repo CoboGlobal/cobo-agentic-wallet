@@ -65,7 +65,7 @@ caw wallet list       # -> list all local wallet profiles (includes wallet_uuid 
 import asyncio
 from cobo_agentic_wallet.client import WalletAPIClient
 
-API_URL = "https://api-core.agenticwallet.cobo.com"
+API_URL = "https://api.agenticwallet.cobo.com"
 API_KEY = "your-api-key"
 WALLET_UUID = "your-wallet-uuid"
 
@@ -84,7 +84,7 @@ All Python SDK methods are `async`. Use `async with WalletAPIClient(...) as clie
 ```typescript
 import { Configuration, TransactionsApi, BalanceApi, WalletsApi } from "@cobo/agentic-wallet";
 
-const API_URL = "https://api-core.agenticwallet.cobo.com";
+const API_URL = "https://api.agenticwallet.cobo.com";
 const API_KEY = "your-api-key";
 const WALLET_UUID = "your-wallet-uuid";
 
