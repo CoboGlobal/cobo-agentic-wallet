@@ -1,7 +1,7 @@
 ---
 name: cobo-agentic-wallet-developer
 metadata:
-  version: "2026.04.23.1"
+  version: "2026.04.23.2"
 description: |
   Developer guide for integrating the Cobo Agentic Wallet SDK into AI agents,
   bots, and automation pipelines. Covers SDK installation (Python/TypeScript),
@@ -218,6 +218,16 @@ caw meta tokens --token-ids ETH_USDC,SETH_USDC
 # Get schema for any command (exact flags + types)
 caw schema tx transfer
 caw schema pact submit
+
+# Submit a pact (required flags + optional metadata flags)
+# --name and --recipe-slugs are optional; all other flags below are required
+caw pact submit \
+  --intent "Transfer 100 USDC to 0xABC on Base" \
+  --execution-plan "# Summary\nTransfer 100 USDC.\n# Operations\n- Transfer 100 USDC to 0xABC on Base\n# Risk Controls\n- Per-tx cap: $101" \
+  --policies '[{"name":"usdc-transfer","type":"transfer","rules":{"effect":"allow","when":{"chain_in":["BASE_ETH"],"token_in":[{"chain_id":"BASE_ETH","token_id":"BASE_USDC"}]},"deny_if":{"amount_usd_gt":"101"}}}]' \
+  --completion-conditions '[{"type":"tx_count","threshold":"1"}]' \
+  --name "USDC transfer to 0xABC" \
+  --recipe-slugs "uniswap-v3-swap"  # slug field from caw recipe search result
 
 # Inspect a pact
 caw pact show --pact-id <pact-id>

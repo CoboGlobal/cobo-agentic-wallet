@@ -1,11 +1,9 @@
 # SDK Scripting
-
 Use the Cobo Agentic Wallet SDK for complex or multi-step operations: DeFi strategies, loops, conditional logic, or any automation that goes beyond a single CLI command.
 
 The SDK is available in **Python** and **TypeScript**. Choose whichever fits your project.
 
 ## Script Management
-
 **All scripts MUST be stored in [`../scripts/`](../scripts/)** — do not create scripts elsewhere.
 
 **Before writing any script:**
@@ -29,29 +27,23 @@ The SDK is available in **Python** and **TypeScript**. Choose whichever fits you
    - Include docstring/JSDoc explaining usage and parameters
 
 ## Prerequisites
-
 - `python3` — required for the Python SDK
 - `node` / `npm` — required for the TypeScript SDK and DeFi calldata encoding. Install from https://nodejs.org if absent.
 - `ethers` — required by several DeFi recipes: `npm install ethers`
 
 ## Install
-
 **Python:**
-
 ```bash
 pip install cobo-agentic-wallet
 ```
 
 **TypeScript / JavaScript:**
-
 ```bash
 npm install @cobo/agentic-wallet
 ```
 
 ## Get Credentials
-
 After onboarding, retrieve your API key and wallet UUID from the CLI:
-
 ```bash
 caw wallet current    # -> api_key, api_url, wallet_uuid
 caw wallet list       # -> list all local wallet profiles (includes wallet_uuid per entry)
@@ -60,7 +52,6 @@ caw wallet list       # -> list all local wallet profiles (includes wallet_uuid 
 ## Script Template
 
 ### Python
-
 ```python
 import asyncio
 from cobo_agentic_wallet.client import WalletAPIClient
@@ -76,11 +67,9 @@ async def main():
 
 asyncio.run(main())
 ```
-
 All Python SDK methods are `async`. Use `async with WalletAPIClient(...) as client:` to ensure the HTTP session is closed cleanly.
 
 ### TypeScript
-
 ```typescript
 import { Configuration, TransactionsApi, BalanceApi, WalletsApi } from "@cobo/agentic-wallet";
 
@@ -96,26 +85,18 @@ const config = new Configuration({
 const txApi = new TransactionsApi(config);
 const balanceApi = new BalanceApi(config);
 const walletsApi = new WalletsApi(config);
-
-// example: list balances
-const resp = await balanceApi.listBalances();
-console.log(resp.data.result);
 ```
-
 TypeScript SDK uses auto-generated API classes. Import the specific `*Api` class for each endpoint group.
 
 ## Common Operations
 
 ### Python
-
 **Balance:**
-
 ```python
 balances = await client.list_balances(WALLET_UUID)
 ```
 
 **Token transfer:**
-
 ```python
 # Always check balance before transferring
 balances = await client.list_balances(WALLET_UUID)
@@ -130,43 +111,14 @@ result = await client.transfer_tokens(
 )
 ```
 
-**Contract call (EVM):**
-
-```python
-result = await client.contract_call(
-    WALLET_UUID,
-    pact_id="<pact-id>",
-    chain_id="ETH",
-    contract_addr="0x...",
-    calldata="0xa9059cbb...",  # ABI-encoded calldata
-    request_id="call-001",
-)
-```
-
-**Transaction history:**
-
-```python
-records = await client.list_transaction_records(WALLET_UUID, limit=20)
-pending = await client.get_pending_operation(operation_id)
-```
-
-**List wallets:**
-
-```python
-wallets = await client.list_wallets()
-```
-
 ### TypeScript
-
 **Balance:**
-
 ```typescript
 const balances = await balanceApi.listBalances();
 console.log(balances.data.result);
 ```
 
 **Token transfer:**
-
 ```typescript
 const result = await txApi.transferTokens(WALLET_UUID, {
   pact_id: "<pact-id>",
@@ -178,35 +130,7 @@ const result = await txApi.transferTokens(WALLET_UUID, {
 console.log(result.data.result);
 ```
 
-**Contract call (EVM):**
-
-```typescript
-const result = await txApi.contractCall(WALLET_UUID, {
-  pact_id: "<pact-id>",
-  chain_id: "ETH",
-  contract_addr: "0x...",
-  calldata: "0xa9059cbb...",  // ABI-encoded calldata
-  request_id: "call-001",
-});
-console.log(result.data.result);
-```
-
-**Transaction history:**
-
-```typescript
-const records = await txApi.listTransactionRecords();
-console.log(records.data.result);
-```
-
-**List wallets:**
-
-```typescript
-const wallets = await walletsApi.listWallets();
-console.log(wallets.data.result);
-```
-
 ## Key Conventions
-
 - **`wallet_uuid`**: pass explicitly to every method; retrieve with `caw wallet current` (active profile) or `caw wallet list` (all local profiles).
 - **`request_id` idempotency**: always set a unique, deterministic ID per logical transaction. Retrying with the same `request_id` is safe — the server deduplicates.
 - **`gasless`**: `false` by default (wallet pays own gas). Set `true` for Cobo Gasless (paired wallets only).
@@ -276,34 +200,9 @@ When calling `wait_for_onchain`, handle both exception types:
 - **`RuntimeError`** (terminal failure: `Failed`, `Rejected`, `Cancelled`) → stop the sequence and report the failure to the user. Do not submit the next transaction.
 - **`TimeoutError`** (no on-chain confirmation within timeout) → report to the user, then check `caw tx get --request-id <id>` to see the current status before deciding whether to retry or wait longer.
 
-**TypeScript equivalent:**
-
-```typescript
-const ONCHAIN_STATUSES = new Set(["Success"]);
-const TERMINAL_STATUSES = new Set(["Failed", "Rejected", "Cancelled"]);
-
-async function waitForOnchain(
-  txApi: TransactionsApi,
-  requestId: string,
-  timeoutMs = 120_000,
-  intervalMs = 1500,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const resp = await txApi.getTransactionByRequestId(requestId);
-    const status = resp.data.result?.status ?? "";
-    if (ONCHAIN_STATUSES.has(status)) return;
-    if (TERMINAL_STATUSES.has(status)) throw new Error(`Transaction ${requestId} failed: ${status}`);
-    await new Promise((r) => setTimeout(r, intervalMs));
-  }
-  throw new Error(`Transaction ${requestId} not on-chain within ${timeoutMs}ms`);
-}
-```
-
 The same rule applies to CLI scripts — poll with `caw tx get --tx-id <record-uuid>` or `caw tx get --request-id <request-id>` and wait for `status` to be `Success` before firing the next `caw tx transfer` or `caw tx call`.
 
 ## DeFi Operations
-
 For DeFi protocols (Uniswap V3, Aave V3, Jupiter, DCA, grid trading, Polymarket, Drift perps):
 
 1. Encode calldata using the protocol's ABI (e.g. via `ethers.js` or `web3.py`)
@@ -315,8 +214,7 @@ For additional protocol recipes, use one of two mechanisms:
 
 **1. Built-in recipe knowledge base** (server-side, no install needed):
 ```bash
-caw recipe search --query "<protocol-name> <chain>"
-# e.g. "uniswap base", "aave arbitrum", "jupiter solana"
+caw recipe search --keywords uniswap,usdc,eth
 ```
 
 **2. External skill packages** (clawhub registry, requires install):
@@ -325,19 +223,6 @@ npx skills find CoboGlobal/cobo-agentic-wallet "<protocol-name> <chain>"
 # or: npx clawhub@latest search "cobo <protocol>"
 ```
 If a matching skill package is found, install it and follow its instructions. Use this when `caw recipe search` returns no results.
-
-## Framework Integrations
-
-Drop the Python SDK as a toolkit into any agent framework:
-
-| Framework | Install | Import |
-|---|---|---|
-| LangChain | `pip install cobo-agentic-wallet[langchain]` | `from cobo_agentic_wallet.integrations.langchain import CoboAgentWalletToolkit` |
-| OpenAI Agents | `pip install cobo-agentic-wallet[openai]` | `from cobo_agentic_wallet.integrations.openai import CoboOpenAIAgentContext` |
-| Agno | `pip install cobo-agentic-wallet[agno]` | `from cobo_agentic_wallet.integrations.agno import CoboAgentWalletTools` |
-| CrewAI | `pip install cobo-agentic-wallet[crewai]` | `from cobo_agentic_wallet.integrations.crewai import CoboAgentWalletCrewAIToolkit` |
-| MCP | `pip install cobo-agentic-wallet[mcp]` | `python -m cobo_agentic_wallet.mcp` |
-
 
 ---
 

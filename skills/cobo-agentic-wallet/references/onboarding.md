@@ -69,6 +69,8 @@ To check pairing completion without waiting for a notification, run `caw wallet 
 caw wallet pair-status
 ```
 
+> **Note:** `pair-status` only tracks the **initial PAIR claim** (filters by `token_purpose=pair`). It does not reflect restore progress — see [Restore](#restore--re-pair-an-already-paired-wallet) below.
+
 Alternatively, run `caw status` and read the `wallet_paired` field (boolean). `true` means pairing has been completed.
 
 Act on the status:
@@ -82,3 +84,8 @@ Act on the status:
 If the user is unreachable before the code expires, stop polling and notify when they return.
 
 **Pair status tracking**: After running `caw wallet pair`, poll with `caw wallet pair-status` to detect when pairing completes. When status is `paired` or `expired`, continue any established next steps from the conversation context.
+
+## Restore — Re-Pair an Already-Paired Wallet
+
+When the user changes devices or reinstalls the Cobo Agentic Wallet app, they need to complete pairing again. Run `caw wallet pair` to generate a new pairing code.
+
