@@ -271,10 +271,21 @@ main() {
     (
       set -euo pipefail
       if should_download_artifact "$BIN_DIR/caw" "caw"; then
-        local caw_tmp_tar
+        local caw_tmp_tar caw_tmp_sum
         caw_tmp_tar="$(mktemp)"
-        trap 'rm -f "$caw_tmp_tar"' EXIT
+        caw_tmp_sum="$(mktemp)"
+        trap 'rm -f "$caw_tmp_tar" "$caw_tmp_sum"' EXIT
         download_with_resume "$caw_url" "$caw_tmp_tar"
+        echo "Verifying checksum..."
+        download_with_resume "${caw_url}.sha256" "$caw_tmp_sum"
+        local expected_sum actual_sum
+        expected_sum="$(awk '{print $1}' "$caw_tmp_sum")"
+        actual_sum="$(sha256_file "$caw_tmp_tar")"
+        if [[ "$actual_sum" != "$expected_sum" ]]; then
+          echo "Checksum mismatch: expected $expected_sum, got $actual_sum" >&2
+          exit 1
+        fi
+        echo "Checksum OK (${actual_sum:0:12}...)"
         extract_caw_assets "$caw_tmp_tar" "$BIN_DIR"
         echo "[DONE] caw downloaded to $BIN_DIR/caw"
       else

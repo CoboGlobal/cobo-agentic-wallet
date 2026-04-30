@@ -23,6 +23,14 @@ Instead of giving an agent a private key, Cobo Agentic Wallet gives it a control
 [![npm version](https://img.shields.io/npm/v/@cobo/agentic-wallet)](https://www.npmjs.com/package/@cobo/agentic-wallet)
 [![License](https://img.shields.io/github/license/CoboGlobal/cobo-agentic-wallet-python-sdk)](https://github.com/CoboGlobal/cobo-agentic-wallet-python-sdk/blob/main/LICENSE)
 
+## AI coding agent support
+
+If you are building with an AI coding agent (Claude Code, Cursor, Windsurf, etc.), install the CAW developer skill to give it context on the SDK and CLI:
+
+```bash
+npx skills add CoboGlobal/cobo-agentic-wallet --skill cobo-agentic-wallet-developer --yes --global
+```
+
 ## Related CAW repositories
 
 These repos are expected CAW open-source entry points. Placeholder links are included here until they are published:
@@ -227,16 +235,10 @@ Runnable examples live under [`examples/`](examples/):
 
 Agent skills live under [`skills/`](skills/). These are skill definitions that enable AI agents to operate Cobo Agentic Wallets — covering onboarding, token transfers, DeFi execution, and more.
 
-Install the skill for onchain operations:
+Install the skill:
 
 ```bash
 npx skills add CoboGlobal/cobo-agentic-wallet --skill cobo-agentic-wallet --yes --global
-```
-
-Install the developer skill for SDK and CLI integration support:
-
-```bash
-npx skills add CoboGlobal/cobo-agentic-wallet --skill cobo-agentic-wallet-developer --yes --global
 ```
 
 ## Additional references

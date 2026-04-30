@@ -28,7 +28,7 @@ Any task that uses `caw tx transfer`, `caw tx call`, or `caw tx sign-message` re
   - Execute as a background task — do not synchronously wait for the transaction result before replying to the user. Pass `<pact_id>` as the first argument.
     ```bash
     caw tx transfer --pact-id <pact_id> \
-      --token-id BASE_USDC --dst-address 0xRecipient... --amount 10 \
+      --token-id BASE_ETH --dst-address 0xRecipient... --amount 10 \
       --request-id pay-001
 
     caw tx call --pact-id <pact_id> \
@@ -79,12 +79,8 @@ Your job: Find the recipe(s) that apply to this task type.
 
 A Recipe is a domain knowledge document for a specific operation type (e.g. DEX swap, lending, DCA). Find the recipe whose use case matches the intent — if no recipe matches, proceed without one. If a match is found, read it before continuing.
 
-```bash
-caw recipe search --query "<protocol-name> <chain>"
-# e.g. "uniswap base", "aave arbitrum", "jupiter solana"
-```
 
-**Output:** The relevant recipe(s) to apply in Steps 3, 4, and 5.
+**Output:** The relevant recipe(s) to apply in Steps 3, 4, and 5. Each result may include a `pact_template` — a pre-structured JSON with `{{placeholder}}` variables. If present, use it as the base for Step 5; fill every `{{placeholder}}` from the recipe's Facts and user intent before submitting.
 
 ### Step 3 — Design Execution Plan
 
@@ -107,11 +103,11 @@ You write 4–8 steps covering: preconditions, main operations, monitoring, erro
 
 > Thinking mode: least privilege
 
-Your job: Derive `--policies` and `--completion-conditions` from the intent and execution plan.
+Your job: Derive `--policies` and `--completion-conditions` strictly from what the user described. Do not infer, add, or assume beyond the stated intent.   
 
 **Policy** — use the recipe from Step 2 as a guide. Anything not explicitly matched by a `when` condition will be denied — there is no implicit pass-through. See [Policy Reference](#policy-reference---policies) for supported fields and schema.
 
-**Completion conditions** — when should the pact be considered done? Derive from the intent (e.g. one-time → `tx_count: 1`, monthly DCA for 6 months → `time_elapsed: 15552000` or `tx_count: 6`). See [Completion Conditions](#completion-conditions---completion-conditions) for supported types.
+**Completion conditions** — when should the pact be considered done? Derive from the intent (e.g. one-time → `{"type": "tx_count", "threshold": "1"}`, monthly DCA for 6 months → `{"type": "time_elapsed", "threshold": "15552000"}` or `{"type": "tx_count", "threshold": "1"}`). See [Completion Conditions](#completion-conditions---completion-conditions) for supported types.
 
 
 ### Step 5 — Assemble Pact
@@ -153,7 +149,7 @@ Present a pre-submit preview to the user with the **4 core items**:
   - If the user requests any change after seeing the preview (e.g. "change the limit to 50"), apply the change, **re-show the full updated preview**, and ask again: "Anything else to change? Confirm to submit." Only submit when the user explicitly confirms the final spec.
 - If the wallet is **paired**: submit directly — the owner will review and approve the pact in the **Cobo Agentic Wallet app**, so in-conversation confirmation is not needed.
 
-Then submit via `caw pact submit` (see [`caw pact submit` Flag Reference](#caw-pact-submit-flag-reference)).
+Then submit via `caw pact submit`. Run `caw pact submit -h` to see the exact flags.
 
 ---
 
@@ -169,7 +165,7 @@ Then submit via `caw pact submit` (see [`caw pact submit` Flag Reference](#caw-p
 
 **Step 2 — Recipe:**
 
-`caw recipe search --query "uniswap base"` → matches Uniswap V3 on Base recipe.
+`caw recipe search --keywords swap,usdc,eth,base` → matches Uniswap V3 on Base recipe.
 
 **Step 3 — Plan:**
 
@@ -193,7 +189,10 @@ Policy — allow Uniswap V3 router on Base, cap at 3 txs/24h (one-time swap, cap
       "effect": "allow",
       "when": {
         "chain_in": ["BASE_ETH"],
-        "target_in": [{ "chain_id": "BASE_ETH", "contract_addr": "0x2626664c2603336E57B271c5C0b26F421741e481" }]
+        "target_in": [
+          { "chain_id": "BASE_ETH", "contract_addr": "0x2626664c2603336E57B271c5C0b26F421741e481" },
+          { "chain_id": "BASE_ETH", "contract_addr": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" }
+        ]
       },
       "deny_if": {
         "usage_limits": { "rolling_24h": { "tx_count_gt": 3 } }
@@ -203,273 +202,15 @@ Policy — allow Uniswap V3 router on Base, cap at 3 txs/24h (one-time swap, cap
 ]
 ```
 
-Completion condition — one-time swap: `tx_count: 1`
+The first entry is the Uniswap V3 router; the second is the USDC token contract (target of the ERC-20 `approve()` call before the swap).
+
+Completion condition — one-time swap: `{"type": "tx_count", "threshold": "1"}`
 
 
 **Step 5 — Assemble and verify:**
 
 - ✅ Intent ($5000 USDC→ETH on Base), plan, and policy all aligned
-- ✅ Policy grants exactly what the plan needs: Uniswap V3 router on Base
+- ✅ Policy grants exactly what the plan needs: Uniswap V3 router + USDC token contract on Base
 - ✅ Completion condition is testable: after 1 tx
-
----
-
-## `caw pact submit` Flag Reference
-
-Translate the user's request into `caw pact submit` flags. Each row maps one aspect of the user's intent to the corresponding flag and describes how to derive the value.
-
-> **Least privilege**: Default to the narrowest scope — shortest duration, tightest token/chain/contract allowlist, and lowest spend cap that fulfills the user's intent. Only widen when the user explicitly asks.
-
-
-| Flag | Required | Notes | How to Derive from User Input |
-|---|---|---|---|
-| `--intent <text>` | yes | Natural language description of the pact's purpose | Distill into action + asset + chain: "buy $500 ETH weekly" → `"Weekly DCA: $500 ETH on Ethereum"`. |
-| `--original-intent <text>` | no | User's original message(s) that triggered this request| Capture raw message(s) as typed. If refined across multiple messages, concatenate chronologically. |
-| `--policies <json>` | yes | JSON array of detailed risk control policy definitions: chain/token/contract allowlists, per-tx caps, rolling limits, review thresholds. | See [Policy Reference](#policy-reference---policies). |
-| `--completion-conditions <json>` | yes | JSON array of completion conditions. | See [Completion Conditions](#completion-conditions---completion-conditions). |
-| `--execution-plan <text>` | yes | Concrete on-chain steps the agent will perform post-approval. | See [Execution Plan](#execution-plan---execution-plan). |
-
-
-### Complete Example
-
-User request: "Help me transfer 1000 USDC to 0xABC...123 on Base"
-
-```bash
-caw pact submit \
-  --intent "Transfer 1000 USDC to 0xABC...123 on Base" \
-  --original-intent "Help me transfer 1000 USDC to 0xABC...123 on Base" \
-  --policies '[
-    {
-      "name": "usdc-transfer",
-      "type": "transfer",
-      "rules": {
-        "effect": "allow",
-        "when": {
-          "chain_in": ["BASE_ETH"],
-          "token_in": [{"chain_id": "BASE_ETH", "token_id": "BASE_USDC"}],
-          "destination_address_in": [{"chain_id": "BASE_ETH", "address": "0xABC...123"}]
-        },
-        "deny_if": {
-          "amount_usd_gt": "1001"
-        }
-      }
-    }
-  ]' \
-  --completion-conditions '[{"type": "tx_count", "threshold": "1"}]' \
-  --execution-plan "# Summary
-Transfer 1000 USDC to 0xABC...123 on Base.
-
-# Operations
-- Transfer 1000 USDC to 0xABC...123 on Base
-
-# Risk Controls
-- Per-tx cap: $1001
-- One-time transfer only"
-```
-
-### Execution Plan (`--execution-plan`)
-
-Describe the operations the agent will run after the pact is active. Use these sections:
-
-- `# Summary` — one-line goal
-- `# Operations` — concrete calls/transfers (token, amount, target contract)
-- `# Risk Controls` — per-tx cap, daily cap, etc
-
-**Example** — "buy $500 ETH weekly on Base":
-
-```
-# Summary
-Weekly DCA: swap $500 USDC to ETH on Base via Uniswap V3.
-
-# Operations
-- Approve USDC spend on Uniswap V3 Router (0x2626...1e481) if needed
-- Swap $500 USDC → ETH via Uniswap V3 on Base
-- Repeat weekly
-
-# Risk Controls
-- Per-swap cap: $550 (includes slippage buffer)
-- Rolling 24h limit: $600
-```
-
-### Completion Conditions (`--completion-conditions`)
-
-JSON array defining when a pact is considered complete. Each object has `type` and `threshold` (required). At least one condition is required. Types cannot be duplicated within a pact.
-
-| Type | Threshold | Description |
-|---|---|---|
-| `tx_count` | string (integer) | Complete after N successful transactions (across all operation types). E.g., `"5"` |
-| `amount_spent` | string (decimal) | Complete after cumulative token amount reaches threshold. E.g., `"3.5"`. Uses the token's transfer unit (e.g., `"1.5"` means 1.5 USDC or 1.5 ETH, not wei). |
-| `amount_spent_usd` | string (decimal) | Complete after cumulative USD spend reaches threshold. E.g., `"3000"`. Note: transactions without price data won't increment progress. |
-| `time_elapsed` | string (seconds) | Complete after N seconds from pact activation. E.g., `"3600"` (1 hour). |
-
-Multiple conditions can be set; the pact completes when **any one** is satisfied (any-of semantics). Once complete, the pact is revoked immediately and no further operations can be executed under it.
-
-### Policy Reference (`--policies`)
-
-Policies constrain operations within a pact via the `--policies` flag. Each policy targets a specific operation type (`transfer`, `contract_call`, or `message_sign`) and always uses `allow` effect. **Default-deny semantics** apply: any operation not matching the `when` conditions of at least one policy is automatically denied — no implicit pass-through. Always define policies that explicitly cover every operation the agent needs to perform.
-
-### Policy Structure
-
-```json
-{
-  "name": "<human-readable-name>",
-  "type": "transfer | contract_call | message_sign",
-  "rules": {
-    "effect": "allow",
-    "when": { ... },
-    "deny_if": { ... },
-    "review_if": { ... },
-    "always_review": true | false
-  }
-}
-```
-
-| Field | Required | Description |
-|---|---|---|
-| `name` | Yes | Human-readable policy name for identification |
-| `type` | Yes | Operation type: `transfer`, `contract_call`, or `message_sign` |
-| **`rules`** | | |
-| `rules.effect` | Yes | Always set to `"allow"`. |
-| `rules.when` | Yes (unless `always_review=true`) | Allowlist conditions — which chains/tokens/contracts/domains to permit |
-| `rules.deny_if` | Optional | Hard-block conditions — usage limits that trigger an automatic deny. |
-| `rules.review_if` | Optional | Soft-block conditions — thresholds that require owner approval before proceeding |
-| `rules.always_review` | Optional | When `true`, every operation matching `when` requires owner approval. Use for sensitive or high-risk tasks. |
-
-**Evaluation flow**:
-
-```
-Operation
-  │
-  ▼
-Match any policy's `when`? ──No──► DENY
-  │
-  Yes
-  │
-  ▼
-Hit `deny_if` limit? ──Yes──► DENY
-  │
-  No
-  │
-  ▼
-Exceed `review_if` threshold? ──No──► ALLOW
-  │
-  Yes
-  │
-  ▼
-Pause for owner approval
-  │
-  ├── approved ──► ALLOW
-  └── rejected ──► DENY
-```
-
-### Allowlist Conditions (`when`)
-
-**For `transfer` policies:**
-
-| Field | Type | Description |
-|---|---|---|
-| `chain_in` | string[] | Restrict to specific chains (e.g. `["BASE_ETH", "ETH"]`) |
-| `token_in` | ChainTokenRef[] | Restrict to specific tokens, e.g. `[{"chain_id":"BASE_ETH","token_id":"BASE_USDC"}]` |
-| `destination_address_in` | ChainAddressRef[] | Restrict to specific destination addresses |
-
-**For `contract_call` policies (EVM):**
-
-| Field | Type | Description |
-|---|---|---|
-| `chain_in` | string[] | Restrict to specific chains |
-| `target_in` | ContractTargetRef[] | Restrict to specific contract addresses. E.g. `[{"chain_id":"BASE_ETH", "contract_addr":"0x..."}]` |
-
-**For `contract_call` policies (Solana):**
-
-| Field | Type | Description |
-|---|---|---|
-| `chain_in` | string[] | Restrict to specific chains |
-| `program_in` | ProgramRef[] | Restrict to specific program IDs |
-
-### Usage Limits (`deny_if`)
-
-| Field | Type | Applies to | Description |
-|---|---|---|---|
-| `amount_gt` | string (decimal) | `transfer` only | Deny if single operation token amount exceeds this |
-| `amount_usd_gt` | string (decimal) | `transfer` only | Deny if single operation USD value exceeds this |
-| `usage_limits.rolling_24h.amount_gt` | string | `transfer` only | Deny if cumulative token amount in the 24h window exceeds this |
-| `usage_limits.rolling_24h.amount_usd_gt` | string | `transfer` only | Deny if cumulative USD value in the 24h window exceeds this |
-| `usage_limits.rolling_24h.tx_count_gt` | integer | `transfer`, `contract_call` | Deny if transaction count in the 24h window exceeds this |
-
-### Review Threshold (`review_if`)
-
-Matching operations require owner approval before execution.
-
-| Field | Type | Applies to | Description |
-|---|---|---|---|
-| `amount_gt` | string (decimal) | `transfer`| Require approval if token amount exceeds this |
-| `amount_usd_gt` | string (decimal) | `transfer`| Require approval if USD value exceeds this |
-
-### Message Sign Policies
-
-`message_sign` policies control EIP-712 typed-data signing.
-
-| Rule | Field | Type | Description |
-|---|---|---|---|
-| `when.domain_match[]` | `param_name` | string | EIP-712 domain field to match (e.g. `"name"`, `"verifyingContract"`) |
-| | `op` | string | `eq`, `neq`, `in`, `not_in` |
-| | `value` | any | Value to compare against |
-| `deny_if` | `usage_limits.rolling_24h.request_count_gt` | integer | Max signing requests per 24h window |
-| `review_if` | *(same fields as `when`)* | | Require owner approval for matching signatures |
-
-**Example — restrict Permit2 signatures to a specific contract:**
-
-```json
-{
-  "name": "permit2-sign",
-  "type": "message_sign",
-  "rules": {
-    "effect": "allow",
-    "when": {
-      "domain_match": [
-        { "param_name": "name", "op": "eq", "value": "Permit2" },
-        { "param_name": "verifyingContract", "op": "eq", "value": "0x000000000022D473030F116dDEE9F6B43aC78BA3" }
-      ]
-    },
-    "deny_if": {
-      "usage_limits": { "rolling_24h": { "request_count_gt": 50 } }
-    }
-  }
-}
-```
-
-### Amount Units and USD Pricing
-
-**Amount units**: `amount_gt` values are in the token's transfer unit — the same unit used when submitting a transfer. For example, "1.5" means 1.5 USDC for USDC, or 1.5 ETH for ETH/SETH (not wei).
-
-**USD Conditions**: USD-based conditions (`amount_usd_gt`, `usage_limits.rolling_24h.amount_usd_gt`) only apply to tokens with available price data — tokens without price data bypass them entirely. For tokens without price data, use token-denominated limits (`amount_gt`, `usage_limits.rolling_24h.amount_gt`) instead.
-
-## CLI Command Reference
-
-### `caw pact submit`
-
-Submit a new pact for owner approval. See [`caw pact submit` Flag Reference](#caw-pact-submit-flag-reference) for flag details.
-
-### `caw pact status --pact-id <pact-id>`
-
-Check the current status of a pact, triggering lazy activation if the pact is ready to become active. Use for a quick status check without loading full detail.
-
-### `caw pact show --pact-id <pact-id>`
-
-Show full details of a specific pact including spec, status, policies, and completion conditions. Also triggers lazy activation if approved.
-
-### `caw pact list`
-
-List pacts with optional filters: `--status`, `--wallet-id`, `--limit`. Use `--after`/`--before` for cursor pagination.
-
-### `caw pact events --pact-id <pact-id>`
-
-Get lifecycle event history for a pact.
-
-### `caw pact revoke --pact-id <pact-id>`
-
-Revoke an **active** pact. **Wallet owner only.**
-
----
 
 After reading: execute transactions under the active pact via `caw tx transfer`, `caw tx call`, or `caw tx sign-message`. If a transaction returns `status=PendingApproval`, see [pending-approval.md](./pending-approval.md).
