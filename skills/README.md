@@ -69,7 +69,7 @@ You have access to a Cobo Agentic Wallet for managing crypto assets with policy 
 The CLI tool is `caw`. Credentials are stored locally — no API key needed in the prompt.
 
 Core capabilities:
-- Onboard a new wallet:    caw onboard [--invitation-code <code>]
+- Onboard a new wallet:    caw onboard
 - Check active wallet:     caw wallet current
 - Check balance:           caw wallet balance
 - Submit a pact:           caw pact submit --program '<json>'

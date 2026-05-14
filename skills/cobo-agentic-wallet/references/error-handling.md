@@ -169,31 +169,13 @@ Transfer fails because the wallet lacks sufficient funds.
 
 **Recovery:** Check balance with `caw wallet balance`, then fund the wallet or reduce the amount.
 
-## Onboarding errors
-
-### `An invitation code is required to provision an agent`
-
-The environment requires an invitation code for autonomous onboarding.
-
-**Recovery:** Request an invitation code from the user, then retry with `--invitation-code`:
-
-```bash
-caw onboard --invitation-code <CODE>
-```
-
-### `Invalid invitation code` / `Invitation code already used`
-
-The provided code is invalid or has already been consumed.
-
-**Recovery:** Ask the user for a new, unused invitation code.
-
 ## TSS Node errors
 
 ### `invalid node ID, please bind your TSS Node to application first`
 
 TSS Node connected to the wrong environment. Check `--env` parameter matches the setup token's environment (sandbox/dev).
 
-**Recovery:** Stop TSS Node, clean up state, then re-run `caw onboard` with the correct `--env` and same `--session-id` / `--invitation-code` as needed.
+**Recovery:** Stop TSS Node, clean up state, then re-run `caw onboard` with the correct `--env` and same `--session-id` as needed.
 
 ### `Timed out waiting for wallet activation`
 

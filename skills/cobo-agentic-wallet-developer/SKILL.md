@@ -33,7 +33,7 @@ curl -fsSL https://raw.githubusercontent.com/CoboGlobal/cobo-agentic-wallet/mast
 export PATH="$HOME/.cobo-agentic-wallet/bin:$PATH"
 
 # 2. Onboard (provision wallet + TSS Node)
-caw onboard --wait --invitation-code <invitation-code>
+caw onboard --wait
 
 # 3. Get credentials
 caw wallet current --show-api-key

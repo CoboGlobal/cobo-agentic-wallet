@@ -13,17 +13,9 @@ export PATH="$HOME/.cobo-agentic-wallet/bin:$PATH"
 caw onboard
 ```
 
-If the user **already has** an invitation code before starting, pass it on the **first call** so provisioning runs immediately — you skip the “get an invitation code” step below.
+**Agent name (optional):** Pass `--agent-name <NAME>` on the first onboard call to set the agent display name. The new wallet is created with display name `<NAME>'s Wallet` (e.g. `Lobster's Wallet`). After you have a `session_id`, keep passing the same `--session-id` on follow-up calls.
 
-```bash
-# Invitation code from Cobo — you own the wallet initially, with limited functionality.
-# Your owner can pair the wallet later to unlock full functionality (see Pairing below).
-caw onboard --invitation-code <CODE>
-```
-
-**Agent name (required):** Always pass `--agent-name <NAME>` on the first onboard call (for example together with `--invitation-code`). This sets the agent display name when provisioning and the new wallet is created with display name `<NAME>'s Wallet` (e.g. `Lobster's Wallet`). If you don't know the agent's name, ask the user before calling onboard. After you have a `session_id`, keep passing the same `--session-id` on follow-up calls.
-
-> **CRITICAL:** The shortcut commands above are for the **first call only**. Once you have called `caw onboard` and received a `session_id`, you **MUST** include `--session-id <SESSION_ID>` on **every** subsequent call — even when adding `--invitation-code`. Omitting `--session-id` starts a brand-new session, discarding prior progress and TSS prewarm work.
+> **CRITICAL:** Once you have called `caw onboard` and received a `session_id`, you **MUST** include `--session-id <SESSION_ID>` on **every** subsequent call. Omitting `--session-id` starts a brand-new session, discarding prior progress and TSS prewarm work.
 
 **How the interactive loop works:**
 1. Call `caw onboard` — read `phase`, `prompts`, `needs_input`, `next_action`, and `session_id`.

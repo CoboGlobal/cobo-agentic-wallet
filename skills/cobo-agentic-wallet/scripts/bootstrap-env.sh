@@ -7,7 +7,7 @@ set -euo pipefail
 # caw: Cobo Agentic Wallet binary release (tar.gz). Package: caw-{version}-{os}-{arch}.tar.gz
 # Bucket: cobo-agenticwallet, path: /binary-release/0.1.0/ (linux-amd64, linux-arm64; darwin when published)
 CAW_BASE_URL="${CAW_BASE_URL:-https://download.agenticwallet.cobo.com/binary-release}"
-CAW_VERSION="${CAW_VERSION:-v0.2.70}"
+CAW_VERSION="${CAW_VERSION:-v0.2.84}"
 # TSS Node: Cobo download (tar.gz)
 TSS_BASE_URL="${TSS_BASE_URL:-https://download.tss.cobo.com/binary-release/latest}"
 INSTALL_ROOT="${INSTALL_ROOT:-$HOME/.cobo-agentic-wallet}"
@@ -212,6 +212,104 @@ wait_job_or_fail() {
   fi
 }
 
+# get_link_dir — returns the directory where the `caw` symlink will be placed.
+#
+# Priority:
+#   $CAW_LINK_DIR (env override) → use as-is
+#   Linux root                   → /usr/local/bin  (FHS, already on PATH)
+#   Everyone else                → $HOME/.local/bin
+get_link_dir() {
+  if [[ -n "${CAW_LINK_DIR:-}" ]]; then
+    echo "$CAW_LINK_DIR"
+    return
+  fi
+  if [[ "$(uname -s)" == "Linux" ]] && [[ "$(id -u)" -eq 0 ]]; then
+    echo "/usr/local/bin"
+  else
+    echo "$HOME/.local/bin"
+  fi
+}
+
+# _PATH_SHELL_UPDATED is set to true by setup_path() when it writes a new
+# PATH entry into a shell config file (i.e. link_dir was not already on PATH).
+_PATH_SHELL_UPDATED=false
+
+# setup_path — symlinks $BIN_DIR/caw into a PATH-accessible directory and,
+# if that directory is not already on PATH, appends an export line to the
+# user's shell config file(s).
+setup_path() {
+  local link_dir
+  link_dir="$(get_link_dir)"
+
+  mkdir -p "$link_dir"
+  ln -sf "$BIN_DIR/caw" "$link_dir/caw"
+  echo "Linked: $link_dir/caw → $BIN_DIR/caw"
+
+  # /usr/local/bin is always on PATH on Linux root — nothing more to do.
+  if [[ "$link_dir" == "/usr/local/bin" ]]; then
+    export PATH="$link_dir:$PATH"
+    return 0
+  fi
+
+  # Check if link_dir is already on PATH *before* we modify $PATH.
+  if echo ":${PATH}:" | grep -q ":${link_dir}:"; then
+    echo "$link_dir is already on PATH"
+    export PATH="$link_dir:$PATH"
+    return 0
+  fi
+
+  # link_dir is not on PATH — update shell config files.
+  local login_shell
+  login_shell="$(basename "${SHELL:-bash}")"
+  local path_line="export PATH=\"$link_dir:\$PATH\""
+  local path_comment="# caw CLI"
+
+  case "$login_shell" in
+    zsh)
+      local configs=()
+      [[ -f "$HOME/.zshrc" ]]    && configs+=("$HOME/.zshrc")
+      [[ -f "$HOME/.zprofile" ]] && configs+=("$HOME/.zprofile")
+      [[ ${#configs[@]} -eq 0 ]] && { touch "$HOME/.zshrc"; configs+=("$HOME/.zshrc"); }
+      for cfg in "${configs[@]}"; do
+        _append_path_to_config "$cfg" "$link_dir" "$path_line" "$path_comment"
+      done
+      ;;
+    fish)
+      local fish_config="$HOME/.config/fish/config.fish"
+      mkdir -p "$(dirname "$fish_config")"
+      touch "$fish_config"
+      if ! grep -q "fish_add_path.*$link_dir" "$fish_config" 2>/dev/null; then
+        printf '\n%s\nfish_add_path "%s"\n' "$path_comment" "$link_dir" >> "$fish_config"
+        echo "Added $link_dir to PATH in $fish_config"
+      fi
+      ;;
+    bash|*)
+      local configs=()
+      [[ -f "$HOME/.bashrc" ]]       && configs+=("$HOME/.bashrc")
+      [[ -f "$HOME/.bash_profile" ]] && configs+=("$HOME/.bash_profile")
+      for cfg in "${configs[@]}"; do
+        _append_path_to_config "$cfg" "$link_dir" "$path_line" "$path_comment"
+      done
+      ;;
+  esac
+
+  # Also update ~/.profile, which is sourced by login shells on most distros.
+  [[ -f "$HOME/.profile" ]] && _append_path_to_config "$HOME/.profile" "$link_dir" "$path_line" "$path_comment"
+
+  _PATH_SHELL_UPDATED=true
+  export PATH="$link_dir:$PATH"
+}
+
+# _append_path_to_config FILE LINK_DIR PATH_LINE COMMENT
+# Appends PATH_LINE to FILE if LINK_DIR is not already mentioned there.
+_append_path_to_config() {
+  local cfg="$1" link_dir="$2" path_line="$3" comment="$4"
+  if ! grep -v '^[[:space:]]*#' "$cfg" 2>/dev/null | grep -q "$link_dir"; then
+    printf '\n%s\n%s\n' "$comment" "$path_line" >> "$cfg"
+    echo "Added $link_dir to PATH in $cfg"
+  fi
+}
+
 main() {
   read -r os arch < <(detect_platform)
   mkdir -p "$BIN_DIR" "$LOG_DIR" "$CACHE_TSS_DIR"
@@ -326,7 +424,15 @@ main() {
     wait_job_or_fail "$tss_pid" "$tss_log" "tss prewarm"
   fi
 
-  echo "[3/3] Done. caw at $BIN_DIR/caw, TSS at $CACHE_TSS_DIR (mode=${DOWNLOAD_ONLY})"
+  if [[ "$DOWNLOAD_ONLY" == "all" || "$DOWNLOAD_ONLY" == "caw" ]]; then
+    echo "[3/3] Setting up caw in PATH..."
+    setup_path
+    local link_dir
+    link_dir="$(get_link_dir)"
+    echo "Done. caw at $link_dir/caw, TSS at $CACHE_TSS_DIR (mode=${DOWNLOAD_ONLY})"
+  else
+    echo "[3/3] Done. TSS at $CACHE_TSS_DIR (mode=${DOWNLOAD_ONLY})"
+  fi
 }
 
 main "$@"

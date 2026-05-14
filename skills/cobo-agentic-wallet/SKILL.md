@@ -1,7 +1,7 @@
 ---
 name: cobo-agentic-wallet
 metadata:
-  version: "1.0.2"
+  version: "1.0.3"
   revision: 1
 description: "Create and manage agentic wallets with Cobo. Use for autonomous onchain operations via the caw CLI: token transfers, contract calls, pact creation and approval, DeFi execution (Uniswap, Aave, Jupiter), and wallet onboarding on EVM chains and Solana. Triggers on requests involving caw, MPC wallet, TSS node, agent wallet, Cobo, pact, or any crypto wallet operation for AI agents. NOT for fiat payments or bank transfers."
 ---

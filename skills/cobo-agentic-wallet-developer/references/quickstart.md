@@ -14,11 +14,11 @@ Add the `export` line to your shell profile (`~/.zshrc` or `~/.bashrc`) so `caw`
 
 ## 2. Onboard
 
-Onboarding provisions a wallet and downloads the TSS Node (key shard manager). You need an **invitation code** from Cobo to proceed.
+Onboarding provisions a wallet and downloads the TSS Node (key shard manager).
 
 ```bash
-# Non-interactive: pass code and wait for completion
-caw onboard --wait --invitation-code <invitation-code>
+# Non-interactive: wait for completion
+caw onboard --wait
 ```
 
 This runs through several phases automatically:
